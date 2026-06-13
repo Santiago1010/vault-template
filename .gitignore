@@ -487,8 +487,13 @@ FodyWeavers.xsd
 context/structure.txt
 0.Project_info
 
-# Kafka secrets — never commit
+# Vault — never commit
+data/
+logs/
 secrets/
+*.seal
+*.token
+
 
 ### VisualStudio Patch ###
 # Additional files built by Visual Studio
