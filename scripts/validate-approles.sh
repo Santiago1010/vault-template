@@ -28,6 +28,7 @@ SERVICE_PATHS=(
   ["gateway"]="secret/data/${PROJECT}/${ENV}/gateway/kong"
   ["discovery"]="secret/data/${PROJECT}/${ENV}/discovery/consul"
   ["services"]="secret/data/${PROJECT}/${ENV}/services/audit-log"
+  ["api"]="secret/data/${PROJECT}/${ENV}/services/api"
 )
 
 if [ ! -f "${APPROLES_FILE}" ]; then

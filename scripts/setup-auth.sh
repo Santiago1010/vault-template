@@ -137,3 +137,31 @@ echo " Policies and AppRoles ready."
 echo " Credentials: ${APPROLES_FILE}"
 echo " Next: ./scripts/validate.sh"
 echo "========================================"
+
+# -----------------------------------------------------------------------------
+# api-template — append after initial setup
+# -----------------------------------------------------------------------------
+setup_api() {
+  ROOT_TOKEN=$(cat "${SECRETS_DIR}/root-token.txt")
+
+  docker cp "${POLICIES_DIR}/api.hcl" "${CONTAINER}:/tmp/api.hcl"
+
+  docker exec \
+    -e VAULT_ADDR="${VAULT_ADDR}" \
+    -e VAULT_TOKEN="${ROOT_TOKEN}" \
+    "${CONTAINER}" vault policy write api /tmp/api.hcl
+
+  echo "[OK]   Policy applied: api"
+
+  docker exec \
+    -e VAULT_ADDR="${VAULT_ADDR}" \
+    -e VAULT_TOKEN="${ROOT_TOKEN}" \
+    "${CONTAINER}" vault write auth/approle/role/api \
+    token_policies="api" \
+    token_ttl=1h \
+    token_max_ttl=4h \
+    secret_id_ttl=0 \
+    secret_id_num_uses=0
+
+  echo "[OK]   AppRole created: api"
+}
