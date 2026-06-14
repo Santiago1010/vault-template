@@ -1,108 +1,85 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Vault KV v2 — Initial Secrets
-# Auto-generates all passwords. Run once after setup-auth.sh.
+# Usage: ./scripts/setup-secrets.sh
+#        ENV=staging ./scripts/setup-secrets.sh
 # =============================================================================
 
 set -euo pipefail
 
-CONTAINER="vault-template"
-VAULT_ADDR="http://127.0.0.1:8200"
-SECRETS_DIR="$(dirname "$0")/../secrets"
-TOKEN_FILE="${SECRETS_DIR}/root-token.txt"
-ENV="${1:-local}"
-PROJECT="kafka-template"
+source "$(dirname "$0")/common.sh"
 
-ROOT_TOKEN=$(cat "${TOKEN_FILE}")
+BASE="secret/${VAULT_PROJECT}/${VAULT_ENV}"
 
-vaultcmd() {
-  docker exec \
-    -e VAULT_ADDR="${VAULT_ADDR}" \
-    -e VAULT_TOKEN="${ROOT_TOKEN}" \
-    "${CONTAINER}" vault "$@"
-}
+info "Writing secrets | project=${VAULT_PROJECT} env=${VAULT_ENV}..."
 
-genpass() {
-  python3 -c "import secrets, string; print(''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32)))"
-}
-
-BASE="secret/${PROJECT}/${ENV}"
-
-echo "[INFO] Writing secrets for project=${PROJECT} env=${ENV}..."
-
-# -----------------------------------------------------------------------------
-# events/ — Kafka + RabbitMQ
-# -----------------------------------------------------------------------------
-echo "[INFO] events/kafka..."
+# events
 vaultcmd kv put "${BASE}/events/kafka" \
   sasl_username="kafka-admin" \
   sasl_password="$(genpass)" \
   keystore_password="$(genpass)" \
   truststore_password="$(genpass)"
+ok "events/kafka"
 
-echo "[INFO] events/rabbitmq..."
 vaultcmd kv put "${BASE}/events/rabbitmq" \
   username="rabbit-admin" \
   password="$(genpass)" \
   erlang_cookie="$(genpass)"
+ok "events/rabbitmq"
 
-# -----------------------------------------------------------------------------
-# database/ — MySQL, PostgreSQL
-# -----------------------------------------------------------------------------
-echo "[INFO] database/mysql..."
+# database
 vaultcmd kv put "${BASE}/database/mysql" \
   root_password="$(genpass)" \
   debezium_username="debezium" \
   debezium_password="$(genpass)" \
   app_username="app" \
   app_password="$(genpass)"
+ok "database/mysql"
 
-echo "[INFO] database/postgresql..."
 vaultcmd kv put "${BASE}/database/postgresql" \
   root_password="$(genpass)" \
   app_username="app" \
   app_password="$(genpass)"
+ok "database/postgresql"
 
-# -----------------------------------------------------------------------------
-# cache/ — Redis
-# -----------------------------------------------------------------------------
-echo "[INFO] cache/redis..."
+# cache
 vaultcmd kv put "${BASE}/cache/redis" \
   password="$(genpass)"
+ok "cache/redis"
 
-# -----------------------------------------------------------------------------
-# gateway/ — Kong
-# -----------------------------------------------------------------------------
-echo "[INFO] gateway/kong..."
+# gateway
 vaultcmd kv put "${BASE}/gateway/kong" \
   pg_password="$(genpass)" \
   admin_token="$(genpass)"
+ok "gateway/kong"
 
-# -----------------------------------------------------------------------------
-# discovery/ — Consul
-# -----------------------------------------------------------------------------
-echo "[INFO] discovery/consul..."
+# discovery
 vaultcmd kv put "${BASE}/discovery/consul" \
-  gossip_key="$(python3 -c "import secrets; import base64; print(base64.b64encode(secrets.token_bytes(32)).decode())")" \
+  gossip_key="$(python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())")" \
   master_token="$(genpass)"
+ok "discovery/consul"
 
-# -----------------------------------------------------------------------------
-# services/
-# -----------------------------------------------------------------------------
-echo "[INFO] services/audit-log..."
+# services
 vaultcmd kv put "${BASE}/services/audit-log" \
   app_secret="$(genpass)"
+ok "services/audit-log"
 
-echo "[INFO] services/ia..."
 vaultcmd kv put "${BASE}/services/ia" \
   app_secret="$(genpass)"
+ok "services/ia"
 
-echo "[INFO] services/notifications..."
 vaultcmd kv put "${BASE}/services/notifications" \
   app_secret="$(genpass)"
+ok "services/notifications"
+
+vaultcmd kv put "${BASE}/services/api" \
+  app_secret="$(genpass)" \
+  jwt_secret="$(genpass)"
+ok "services/api"
 
 echo ""
 echo "========================================"
-echo " Secrets written for env: ${ENV}"
-echo " Verify: vault kv list secret/${PROJECT}/${ENV}/"
+echo " Secrets written."
+echo " Project: ${VAULT_PROJECT} | Env: ${VAULT_ENV}"
+echo " Next: ./scripts/setup-hardening.sh"
 echo "========================================"

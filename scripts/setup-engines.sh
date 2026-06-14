@@ -1,62 +1,36 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Vault Secrets Engines & Auth Methods Setup
-# Run once after init
+# Vault Secrets Engines + Auth Methods
+# Usage: ./scripts/setup-engines.sh
+#        ENV=staging ./scripts/setup-engines.sh
 # =============================================================================
 
 set -euo pipefail
 
-CONTAINER="vault-template"
-VAULT_ADDR="http://127.0.0.1:8200"
-SECRETS_DIR="$(dirname "$0")/../secrets"
-TOKEN_FILE="${SECRETS_DIR}/root-token.txt"
+source "$(dirname "$0")/common.sh"
 
-ROOT_TOKEN=$(cat "${TOKEN_FILE}")
-
-vaultcmd() {
-  docker exec \
-    -e VAULT_ADDR="${VAULT_ADDR}" \
-    -e VAULT_TOKEN="${ROOT_TOKEN}" \
-    "${CONTAINER}" vault "$@"
-}
-
-# -----------------------------------------------------------------------------
-# KV v2
-# -----------------------------------------------------------------------------
-echo "[INFO] Enabling KV v2 at secret/..."
+info "Enabling KV v2 at secret/..."
 vaultcmd secrets enable -path=secret -version=2 kv \
-  && echo "[OK] KV v2 enabled" \
-  || echo "[WARN] Already enabled"
+  && ok "KV v2 enabled" || info "Already enabled"
 
-# -----------------------------------------------------------------------------
-# AppRole
-# -----------------------------------------------------------------------------
-echo "[INFO] Enabling AppRole auth..."
+info "Enabling AppRole auth..."
 vaultcmd auth enable approle \
-  && echo "[OK] AppRole enabled" \
-  || echo "[WARN] Already enabled"
+  && ok "AppRole enabled" || info "Already enabled"
 
-# -----------------------------------------------------------------------------
-# Database engine (placeholder — configured per service later)
-# -----------------------------------------------------------------------------
-echo "[INFO] Enabling Database secrets engine..."
+info "Enabling Database engine..."
 vaultcmd secrets enable database \
-  && echo "[OK] Database engine enabled" \
-  || echo "[WARN] Already enabled"
+  && ok "Database engine enabled" || info "Already enabled"
 
-# -----------------------------------------------------------------------------
-# PKI engine (placeholder — configured in Phase 6)
-# -----------------------------------------------------------------------------
-echo "[INFO] Enabling PKI secrets engine..."
+info "Enabling PKI engine..."
 vaultcmd secrets enable pki \
-  && echo "[OK] PKI engine enabled" \
-  || echo "[WARN] Already enabled"
+  && ok "PKI engine enabled" || info "Already enabled"
 
-vaultcmd secrets tune -max-lease-ttl=87600h pki \
-  && echo "[OK] PKI max TTL set to 10 years"
+vaultcmd secrets tune -max-lease-ttl=87600h pki
+ok "PKI max TTL set to 87600h"
 
 echo ""
 echo "========================================"
-echo " Engines and auth methods ready."
-echo " Next: ./scripts/validate.sh"
+echo " Engines ready."
+echo " Project: ${VAULT_PROJECT} | Env: ${VAULT_ENV}"
+echo " Next: ./scripts/setup-auth.sh"
 echo "========================================"

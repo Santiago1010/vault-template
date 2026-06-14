@@ -1,118 +1,74 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Vault Validation Script — Local Development
+# Vault Validation
+# Usage: ./scripts/validate.sh
+#        ENV=staging ./scripts/validate.sh
 # =============================================================================
 
 set -euo pipefail
 
-CONTAINER="vault-template"
-VAULT_ADDR="http://127.0.0.1:8200"
-SECRETS_DIR="$(dirname "$0")/../secrets"
-TOKEN_FILE="${SECRETS_DIR}/root-token.txt"
+source "$(dirname "$0")/common.sh"
 
 PASS=0
 FAIL=0
 
-ok()   { echo "[OK]   $1"; PASS=$((PASS + 1)); }
-fail() { echo "[FAIL] $1"; FAIL=$((FAIL + 1)); }
-info() { echo "[INFO] $1"; }
+_ok()   { echo "[OK]   $1"; PASS=$((PASS + 1)); }
+_fail() { echo "[FAIL] $1"; FAIL=$((FAIL + 1)); }
 
-# -----------------------------------------------------------------------------
-# Sanity checks
-# -----------------------------------------------------------------------------
-if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
-  echo "[ERROR] Container ${CONTAINER} is not running."
+if ! docker ps --format '{{.Names}}' | grep -q "^${VAULT_CONTAINER}$"; then
+  echo "[ERROR] Container ${VAULT_CONTAINER} is not running."
   exit 1
 fi
 
-if [ ! -f "${TOKEN_FILE}" ]; then
-  echo "[ERROR] Root token not found. Run scripts/init.sh first."
-  exit 1
-fi
-
-ROOT_TOKEN=$(cat "${TOKEN_FILE}")
-
-vaultcmd() {
-  docker exec \
-    -e VAULT_ADDR="${VAULT_ADDR}" \
-    -e VAULT_TOKEN="${ROOT_TOKEN}" \
-    "${CONTAINER}" vault "$@"
-}
-
-# -----------------------------------------------------------------------------
-# 1. Status
-# -----------------------------------------------------------------------------
+# Status
 info "Checking Vault status..."
-
 STATUS=$(vaultcmd status -format=json 2>/dev/null || true)
 
 echo "${STATUS}" | python3 -c "import sys,json; exit(0 if json.load(sys.stdin)['initialized'] else 1)" \
-  && ok "Vault is initialized" || fail "Vault is NOT initialized"
+  && _ok "Vault is initialized" || _fail "Vault is NOT initialized"
 
 echo "${STATUS}" | python3 -c "import sys,json; exit(0 if not json.load(sys.stdin)['sealed'] else 1)" \
-  && ok "Vault is unsealed" || fail "Vault is sealed"
+  && _ok "Vault is unsealed" || _fail "Vault is sealed"
 
-# -----------------------------------------------------------------------------
-# 2. Auth methods
-# -----------------------------------------------------------------------------
+# Auth methods
 info "Checking auth methods..."
-
 AUTH=$(vaultcmd auth list -format=json 2>/dev/null || echo "{}")
 
 echo "${AUTH}" | python3 -c "import sys,json; exit(0 if 'approle/' in json.load(sys.stdin) else 1)" \
-  && ok "AppRole auth enabled" || fail "AppRole auth NOT enabled (will enable later)"
+  && _ok "AppRole auth enabled" || _fail "AppRole NOT enabled"
 
 echo "${AUTH}" | python3 -c "import sys,json; exit(0 if 'token/' in json.load(sys.stdin) else 1)" \
-  && ok "Token auth enabled" || fail "Token auth NOT enabled"
+  && _ok "Token auth enabled" || _fail "Token auth NOT enabled"
 
-# -----------------------------------------------------------------------------
-# 3. Secrets engines
-# -----------------------------------------------------------------------------
+# Secrets engines
 info "Checking secrets engines..."
-
 MOUNTS=$(vaultcmd secrets list -format=json 2>/dev/null || echo "{}")
 
-echo "${MOUNTS}" | python3 -c "import sys,json; exit(0 if 'secret/' in json.load(sys.stdin) else 1)" \
-  && ok "KV v2 enabled (secret/)" || fail "KV v2 NOT enabled (will enable later)"
+for engine in "secret/" "database/" "pki/"; do
+  echo "${MOUNTS}" | python3 -c "import sys,json; exit(0 if '${engine}' in json.load(sys.stdin) else 1)" \
+    && _ok "${engine} enabled" || _fail "${engine} NOT enabled"
+done
 
-echo "${MOUNTS}" | python3 -c "import sys,json; exit(0 if 'database/' in json.load(sys.stdin) else 1)" \
-  && ok "Database engine enabled" || fail "Database engine NOT enabled (will enable later)"
-
-echo "${MOUNTS}" | python3 -c "import sys,json; exit(0 if 'pki/' in json.load(sys.stdin) else 1)" \
-  && ok "PKI engine enabled" || fail "PKI engine NOT enabled (will enable later)"
-
-# -----------------------------------------------------------------------------
-# 4. Audit log
-# -----------------------------------------------------------------------------
+# Audit log
 info "Checking audit log..."
-
 AUDIT=$(vaultcmd audit list -format=json 2>/dev/null || echo "{}")
-
 echo "${AUDIT}" | python3 -c "import sys,json; exit(0 if 'file/' in json.load(sys.stdin) else 1)" \
-  && ok "Audit log enabled (file/)" || fail "Audit log NOT enabled"
+  && _ok "Audit log enabled" || _fail "Audit log NOT enabled"
 
-# -----------------------------------------------------------------------------
-# 5. KV smoke test
-# -----------------------------------------------------------------------------
+# KV smoke test
 info "Running KV smoke test..."
-
 vaultcmd kv put secret/validate/smoke test=ok > /dev/null 2>&1 \
-  && ok "KV write succeeded" || fail "KV write FAILED"
+  && _ok "KV write succeeded" || _fail "KV write FAILED"
 
 READ=$(vaultcmd kv get -field=test secret/validate/smoke 2>/dev/null || echo "")
-[ "${READ}" = "ok" ] \
-  && ok "KV read succeeded" || fail "KV read FAILED"
-
+[ "${READ}" = "ok" ] && _ok "KV read succeeded" || _fail "KV read FAILED"
 vaultcmd kv delete secret/validate/smoke > /dev/null 2>&1 || true
 
-# -----------------------------------------------------------------------------
-# Summary
-# -----------------------------------------------------------------------------
 echo ""
 echo "========================================"
 echo " Validation complete"
-echo " Passed: ${PASS}"
-echo " Failed: ${FAIL}"
+echo " Project: ${VAULT_PROJECT} | Env: ${VAULT_ENV}"
+echo " Passed: ${PASS} | Failed: ${FAIL}"
 echo "========================================"
 
 [ "${FAIL}" -eq 0 ] && exit 0 || exit 1
