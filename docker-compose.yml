@@ -5,7 +5,7 @@
 services:
   vault:
     image: hashicorp/vault:1.17
-    container_name: vault
+    container_name: vault-template
     restart: unless-stopped
     cap_add:
       - IPC_LOCK

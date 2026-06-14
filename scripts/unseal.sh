@@ -15,7 +15,7 @@ export VAULT_ADDR
 # -----------------------------------------------------------------------------
 # Sanity checks
 # -----------------------------------------------------------------------------
-if ! docker ps --format '{{.Names}}' | grep -q '^vault$'; then
+if ! docker ps --format '{{.Names}}' | grep -q '^vault-template$'; then
   echo "[ERROR] Vault container is not running. Run: docker compose up -d"
   exit 1
 fi
@@ -29,7 +29,7 @@ fi
 # -----------------------------------------------------------------------------
 # Check if already unsealed
 # -----------------------------------------------------------------------------
-STATUS=$(vault status -format=json 2>/dev/null || true)
+STATUS=$(docker exec vault-template vault status -format=json 2>/dev/null || true)
 SEALED=$(echo "${STATUS}" | python3 -c "import sys,json; print(json.load(sys.stdin)['sealed'])" 2>/dev/null || echo "true")
 
 if [ "${SEALED}" = "False" ]; then
@@ -51,7 +51,7 @@ for key in data['unseal_keys_b64'][:3]:
 ")
 
 while IFS= read -r key; do
-  vault operator unseal "${key}"
+  docker exec vault-template vault operator unseal "${key}"
 done <<< "${KEYS}"
 
 echo "[OK] Vault unsealed."
