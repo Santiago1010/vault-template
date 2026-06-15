@@ -15,3 +15,12 @@ path "secret/metadata/kafka-template/+/database/*" {
 path "database/creds/+" {
   capabilities = ["read"]
 }
+
+# Dynamic credentials
+path "database/creds/debezium" {
+  capabilities = ["read"]
+}
+
+path "database/creds/app" {
+  capabilities = ["read"]
+}
