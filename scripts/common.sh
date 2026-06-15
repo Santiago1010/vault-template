@@ -22,7 +22,7 @@ set +a
 # Derived
 SECRETS_DIR="${ROOT_DIR}/secrets"
 POLICIES_DIR="${ROOT_DIR}/policies"
-TOKEN_FILE="${SECRETS_DIR}/root-token.txt"
+TOKEN_FILE="${SECRETS_DIR}/operator-token.txt"
 APPROLES_FILE="${SECRETS_DIR}/approles.json"
 PKI_DIR="${SECRETS_DIR}/pki"
 

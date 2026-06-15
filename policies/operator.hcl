@@ -1,10 +1,7 @@
 # =============================================================================
 # Policy: operator
-# For: admin scripts, CI/CD
-# NOT for services — use AppRole per service
 # =============================================================================
 
-# Secrets engines
 path "secret/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
@@ -21,42 +18,36 @@ path "pki_int/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
 
-# Auth methods
 path "auth/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
 }
 
-# Policies
 path "sys/policies/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
 
-# Audit
 path "sys/audit*" {
-  capabilities = ["read", "list"]
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
 }
 
-# Health + seal status
 path "sys/health" {
-  capabilities = ["read"]
+  capabilities = ["read", "sudo"]
 }
 
 path "sys/seal-status" {
   capabilities = ["read"]
 }
 
-# Secrets engine management
 path "sys/mounts/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
 }
 
 path "sys/mounts" {
   capabilities = ["read", "list"]
 }
 
-# Token management — own tokens only
 path "auth/token/create" {
-  capabilities = ["create", "update"]
+  capabilities = ["create", "update", "sudo"]
 }
 
 path "auth/token/renew-self" {
@@ -65,4 +56,9 @@ path "auth/token/renew-self" {
 
 path "auth/token/revoke-self" {
   capabilities = ["update"]
+}
+
+# List auth methods
+path "sys/auth" {
+  capabilities = ["read", "sudo"]
 }
