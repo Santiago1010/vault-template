@@ -1,5 +1,6 @@
 # =============================================================================
 # Vault — Production-grade local setup
+# Network: kafka-network (external, already exists)
 # =============================================================================
 
 services:
@@ -22,11 +23,11 @@ services:
       - ./logs:/vault/logs
     command: vault server -config=/vault/config/vault.hcl
     healthcheck:
-      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      test: ["CMD", "sh", "-c", "wget -qO- http://127.0.0.1:8200/v1/sys/health?sealedcode=200 | grep -q initialized"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 15s
     networks:
       - kafka-network
     logging:
@@ -34,6 +35,20 @@ services:
       options:
         max-size: "100m"
         max-file: "3"
+
+  vault-unseal:
+    image: python:3.11-alpine
+    container_name: vault-unseal
+    restart: "no"
+    depends_on:
+      vault:
+        condition: service_healthy
+    volumes:
+      - ./scripts/entrypoint-unseal.sh:/entrypoint-unseal.sh:ro
+      - ./secrets:/secrets:ro
+    command: sh /entrypoint-unseal.sh
+    networks:
+      - kafka-network
 
 networks:
   kafka-network:
