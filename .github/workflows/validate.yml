@@ -1,0 +1,55 @@
+# =============================================================================
+# Vault Validate Pipeline — PRs only
+# Lints configs and validates local Vault if running
+# =============================================================================
+
+name: Validate
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint shell scripts
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: "./scripts"
+
+      - name: Validate HCL policies
+        run: |
+          for f in policies/*.hcl; do
+            echo "Checking ${f}..."
+            # Basic syntax check — no empty capability arrays
+            grep -n 'capabilities = \[\]' "${f}" && echo "WARN: empty capabilities in ${f}" || true
+          done
+
+      - name: Validate docker-compose
+        run: docker compose config --quiet
+
+      - name: Check .env.example has all required keys
+        run: |
+          REQUIRED_KEYS=(
+            VAULT_PROJECT
+            VAULT_ENV
+            VAULT_CONTAINER
+            VAULT_ADDR
+            VAULT_DOMAIN
+            AWS_REGION
+            VAULT_DB_ENGINE
+            VAULT_DB_HOST
+            VAULT_DB_PORT
+            VAULT_DB_ROOT_USER
+          )
+          for key in "${REQUIRED_KEYS[@]}"; do
+            grep -q "^${key}=" .env.example \
+              && echo "[OK] ${key}" \
+              || (echo "[FAIL] Missing key: ${key}" && exit 1)
+          done

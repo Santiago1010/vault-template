@@ -1,0 +1,88 @@
+# =============================================================================
+# Vault Secret Rotation
+# Triggers: schedule (weekly) or manual
+# =============================================================================
+
+name: Rotate Secrets
+
+on:
+  schedule:
+    - cron: "0 2 * * 0"  # Every Sunday at 2am UTC
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options: [dev, staging, prod]
+      service:
+        description: "Service to rotate (leave empty for all)"
+        required: false
+        type: string
+
+env:
+  AWS_REGION: us-east-1
+  VAULT_ENV: ${{ github.event.inputs.environment || 'dev' }}
+
+jobs:
+  rotate:
+    name: Rotate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get Vault instance
+        id: instance
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Project,Values=${{ vars.TF_PROJECT }}" \
+              "Name=tag:Service,Values=vault" \
+              "Name=tag:Environment,Values=${{ env.VAULT_ENV }}" \
+              "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+          echo "instance_id=${INSTANCE_ID}" >> $GITHUB_OUTPUT
+
+      - name: Rotate secrets via SSM
+        run: |
+          SERVICE="${{ github.event.inputs.service }}"
+          CMD="cd /opt/vault && ENV=${{ env.VAULT_ENV }} ./scripts/setup-secrets.sh"
+
+          aws ssm send-command \
+            --instance-ids "${{ steps.instance.outputs.instance_id }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters commands=["${CMD}"] \
+            --output text
+
+      - name: Rotate operator token
+        run: |
+          aws ssm send-command \
+            --instance-ids "${{ steps.instance.outputs.instance_id }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters commands=[
+              "cd /opt/vault",
+              "ENV=${{ env.VAULT_ENV }} ./scripts/rotate-token.sh"
+            ] \
+            --output text
+
+      - name: Validate after rotation
+        run: |
+          aws ssm send-command \
+            --instance-ids "${{ steps.instance.outputs.instance_id }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters commands=[
+              "cd /opt/vault",
+              "ENV=${{ env.VAULT_ENV }} ./scripts/validate.sh"
+            ] \
+            --output text
