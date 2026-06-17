@@ -9,6 +9,10 @@ set -euo pipefail
 
 source "$(dirname "$0")/common.sh"
 
+# VPC private CIDR — tokens are restricted to this range in production.
+# For local development (ENV=local), CIDR binding is skipped.
+VPC_CIDR="10.0.0.0/16"
+
 SERVICES=("events" "database" "cache" "gateway" "discovery" "services" "api")
 
 # -----------------------------------------------------------------------------
@@ -35,23 +39,36 @@ for service in "${SERVICES[@]}"; do
 done
 
 # -----------------------------------------------------------------------------
-# Create AppRoles + save credentials
+# Create AppRoles
+# In production (ENV != local): restrict tokens to VPC CIDR
 # -----------------------------------------------------------------------------
 info "Creating AppRoles..."
 
-declare -A ROLE_DATA
-
 for service in "${SERVICES[@]}"; do
-  vaultcmd write "auth/approle/role/${service}" \
-    token_policies="${service}" \
-    token_ttl=1h \
-    token_max_ttl=4h \
-    secret_id_ttl=0 \
-    secret_id_num_uses=0
+  if [ "${VAULT_ENV}" = "local" ]; then
+    vaultcmd write "auth/approle/role/${service}" \
+      token_policies="${service}" \
+      token_ttl=1h \
+      token_max_ttl=4h \
+      secret_id_ttl=168h \
+      secret_id_num_uses=0
+  else
+    vaultcmd write "auth/approle/role/${service}" \
+      token_policies="${service}" \
+      token_ttl=1h \
+      token_max_ttl=4h \
+      secret_id_ttl=168h \
+      secret_id_num_uses=0 \
+      token_bound_cidrs="${VPC_CIDR}" \
+      secret_id_bound_cidrs="${VPC_CIDR}"
+  fi
 
-  ok "AppRole created: ${service}"
+  ok "AppRole created: ${service} (secret_id_ttl=168h)"
 done
 
+# -----------------------------------------------------------------------------
+# Save credentials to approles.json
+# -----------------------------------------------------------------------------
 python3 << PYEOF
 import json, subprocess, os
 
@@ -95,5 +112,9 @@ echo ""
 echo "========================================"
 echo " Auth ready."
 echo " Project: ${VAULT_PROJECT} | Env: ${VAULT_ENV}"
+echo " secret_id_ttl: 168h (7 days)"
+if [ "${VAULT_ENV}" != "local" ]; then
+  echo " CIDR binding: ${VPC_CIDR}"
+fi
 echo " Next: ./scripts/setup-secrets.sh"
 echo "========================================"

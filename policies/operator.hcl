@@ -1,5 +1,7 @@
 # =============================================================================
 # Policy: operator
+# Used by: CI/CD scripts, automated workflows
+# NOT for: root token generation, emergency access (use admin.hcl)
 # =============================================================================
 
 path "secret/*" {
@@ -18,8 +20,9 @@ path "pki_int/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
 
+# Auth methods — manage AppRoles and policies, but no sudo
 path "auth/*" {
-  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+  capabilities = ["create", "read", "update", "delete", "list"]
 }
 
 path "sys/policies/*" {
@@ -27,11 +30,11 @@ path "sys/policies/*" {
 }
 
 path "sys/audit*" {
-  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+  capabilities = ["create", "read", "update", "delete", "list"]
 }
 
 path "sys/health" {
-  capabilities = ["read", "sudo"]
+  capabilities = ["read"]
 }
 
 path "sys/seal-status" {
@@ -39,7 +42,7 @@ path "sys/seal-status" {
 }
 
 path "sys/mounts/*" {
-  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+  capabilities = ["create", "read", "update", "delete", "list"]
 }
 
 path "sys/mounts" {
@@ -47,7 +50,7 @@ path "sys/mounts" {
 }
 
 path "auth/token/create" {
-  capabilities = ["create", "update", "sudo"]
+  capabilities = ["create", "update"]
 }
 
 path "auth/token/renew-self" {
@@ -58,7 +61,6 @@ path "auth/token/revoke-self" {
   capabilities = ["update"]
 }
 
-# List auth methods
 path "sys/auth" {
-  capabilities = ["read", "sudo"]
+  capabilities = ["read"]
 }
