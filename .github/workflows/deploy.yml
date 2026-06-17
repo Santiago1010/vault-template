@@ -178,21 +178,6 @@ jobs:
             --output text)
           echo "vault_ip=${IP}" >> $GITHUB_OUTPUT
 
-      - name: Setup Vault environment
-        run: |
-          cat > .env.${{ env.VAULT_ENV }} << ENVEOF
-          VAULT_PROJECT=${{ vars.TF_PROJECT }}
-          VAULT_ENV=${{ env.VAULT_ENV }}
-          VAULT_CONTAINER=vault
-          VAULT_ADDR=http://${{ steps.vault_ip.outputs.vault_ip }}:8200
-          VAULT_DOMAIN=${{ vars.TF_PROJECT }}.internal
-          AWS_REGION=${{ env.AWS_REGION }}
-          VAULT_DB_ENGINE=postgresql
-          VAULT_DB_HOST=${{ vars.POSTGRESQL_PRIVATE_IP }}
-          VAULT_DB_PORT=5432
-          VAULT_DB_ROOT_USER=postgres
-          ENVEOF
-
       - name: Setup Vault via SSM
         run: |
           INSTANCE_ID=$(aws ec2 describe-instances \
@@ -204,18 +189,31 @@ jobs:
             --query "Reservations[0].Instances[0].InstanceId" \
             --output text)
 
-          # Copy scripts to EC2 via SSM
+          SETUP_CMD=$(cat << 'SSMEOF'
+          export VAULT_PROJECT=${{ vars.TF_PROJECT }}
+          export VAULT_ENV=${{ env.VAULT_ENV }}
+          export VAULT_CONTAINER=vault
+          export VAULT_ADDR=https://127.0.0.1:8200
+          export VAULT_CACERT=/etc/vault/tls/vault.crt
+          export VAULT_DOMAIN=${{ vars.TF_PROJECT }}.internal
+          export AWS_REGION=${{ env.AWS_REGION }}
+          export VAULT_DB_ENGINE=postgresql
+          export VAULT_DB_HOST=${{ vars.POSTGRESQL_PRIVATE_IP }}
+          export VAULT_DB_PORT=5432
+          export VAULT_DB_ROOT_USER=postgres
+          cd /opt/vault
+          ENV=${{ env.VAULT_ENV }} ./scripts/setup-engines.sh
+          ENV=${{ env.VAULT_ENV }} ./scripts/setup-auth.sh
+          ENV=${{ env.VAULT_ENV }} ./scripts/setup-secrets.sh
+          ENV=${{ env.VAULT_ENV }} ./scripts/setup-pki.sh
+          ENV=${{ env.VAULT_ENV }} ./scripts/setup-database.sh
+          SSMEOF
+          )
+
           aws ssm send-command \
             --instance-ids "${INSTANCE_ID}" \
             --document-name "AWS-RunShellScript" \
-            --parameters commands=[
-              "cd /opt/vault",
-              "ENV=${{ env.VAULT_ENV }} ./scripts/setup-engines.sh",
-              "ENV=${{ env.VAULT_ENV }} ./scripts/setup-auth.sh",
-              "ENV=${{ env.VAULT_ENV }} ./scripts/setup-secrets.sh",
-              "ENV=${{ env.VAULT_ENV }} ./scripts/setup-pki.sh",
-              "ENV=${{ env.VAULT_ENV }} ./scripts/setup-database.sh"
-            ] \
+            --parameters "commands=["${SETUP_CMD}"]" \
             --output text
 
   # ---------------------------------------------------------------------------
