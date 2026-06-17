@@ -210,11 +210,23 @@ jobs:
           SSMEOF
           )
 
-          aws ssm send-command \
+          CMD_ID=$(aws ssm send-command \
             --instance-ids "${INSTANCE_ID}" \
             --document-name "AWS-RunShellScript" \
-            --parameters "commands=["${SETUP_CMD}"]" \
-            --output text
+            --parameters "commands=[\"${SETUP_CMD}\"]" \
+            --query Command.CommandId \
+            --output text)
+
+          aws ssm wait command-executed \
+            --command-id "${CMD_ID}" \
+            --instance-id "${INSTANCE_ID}"
+
+          RESULT=$(aws ssm get-command-invocation \
+            --command-id "${CMD_ID}" \
+            --instance-id "${INSTANCE_ID}" \
+            --query StatusDetails --output text)
+          echo "Setup result: ${RESULT}"
+          [ "${RESULT}" = "Success" ] || exit 1
 
   # ---------------------------------------------------------------------------
   # 4. Validate
@@ -255,12 +267,20 @@ jobs:
             --query "Reservations[0].Instances[0].InstanceId" \
             --output text)
 
-          aws ssm send-command \
+          CMD_ID=$(aws ssm send-command \
             --instance-ids "${INSTANCE_ID}" \
             --document-name "AWS-RunShellScript" \
-            --parameters commands=[
-              "cd /opt/vault",
-              "ENV=${{ env.VAULT_ENV }} ./scripts/validate.sh",
-              "ENV=${{ env.VAULT_ENV }} ./scripts/validate-approles.sh"
-            ] \
-            --output text
+            --parameters "commands=[\"cd /opt/vault && ENV=${{ env.VAULT_ENV }} ./scripts/validate.sh && ENV=${{ env.VAULT_ENV }} ./scripts/validate-approles.sh\"]" \
+            --query Command.CommandId \
+            --output text)
+
+          aws ssm wait command-executed \
+            --command-id "${CMD_ID}" \
+            --instance-id "${INSTANCE_ID}"
+
+          RESULT=$(aws ssm get-command-invocation \
+            --command-id "${CMD_ID}" \
+            --instance-id "${INSTANCE_ID}" \
+            --query StatusDetails --output text)
+          echo "Validate result: ${RESULT}"
+          [ "${RESULT}" = "Success" ] || exit 1

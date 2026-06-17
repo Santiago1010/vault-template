@@ -55,34 +55,61 @@ jobs:
           echo "instance_id=${INSTANCE_ID}" >> $GITHUB_OUTPUT
 
       - name: Rotate secrets via SSM
+        id: ssm_secrets
         run: |
-          SERVICE="${{ github.event.inputs.service }}"
-          CMD="cd /opt/vault && ENV=${{ env.VAULT_ENV }} ./scripts/setup-secrets.sh"
-
-          aws ssm send-command \
+          CMD_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.instance.outputs.instance_id }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters commands=["${CMD}"] \
-            --output text
+            --parameters "commands=[\"cd /opt/vault && ENV=${{ env.VAULT_ENV }} ./scripts/setup-secrets.sh\"]" \
+            --query Command.CommandId --output text)
+
+          aws ssm wait command-executed \
+            --command-id "${CMD_ID}" \
+            --instance-id "${{ steps.instance.outputs.instance_id }}"
+
+          RESULT=$(aws ssm get-command-invocation \
+            --command-id "${CMD_ID}" \
+            --instance-id "${{ steps.instance.outputs.instance_id }}" \
+            --query StatusDetails --output text)
+          echo "Secrets rotation result: ${RESULT}"
+          [ "${RESULT}" = "Success" ] || exit 1
 
       - name: Rotate operator token
+        id: ssm_token
         run: |
-          aws ssm send-command \
+          CMD_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.instance.outputs.instance_id }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters commands=[
-              "cd /opt/vault",
-              "ENV=${{ env.VAULT_ENV }} ./scripts/rotate-token.sh"
-            ] \
-            --output text
+            --parameters "commands=[\"cd /opt/vault && ENV=${{ env.VAULT_ENV }} ./scripts/rotate-token.sh\"]" \
+            --query Command.CommandId --output text)
+
+          aws ssm wait command-executed \
+            --command-id "${CMD_ID}" \
+            --instance-id "${{ steps.instance.outputs.instance_id }}"
+
+          RESULT=$(aws ssm get-command-invocation \
+            --command-id "${CMD_ID}" \
+            --instance-id "${{ steps.instance.outputs.instance_id }}" \
+            --query StatusDetails --output text)
+          echo "Token rotation result: ${RESULT}"
+          [ "${RESULT}" = "Success" ] || exit 1
 
       - name: Validate after rotation
+        id: ssm_validate
         run: |
-          aws ssm send-command \
+          CMD_ID=$(aws ssm send-command \
             --instance-ids "${{ steps.instance.outputs.instance_id }}" \
             --document-name "AWS-RunShellScript" \
-            --parameters commands=[
-              "cd /opt/vault",
-              "ENV=${{ env.VAULT_ENV }} ./scripts/validate.sh"
-            ] \
-            --output text
+            --parameters "commands=[\"cd /opt/vault && ENV=${{ env.VAULT_ENV }} ./scripts/validate.sh\"]" \
+            --query Command.CommandId --output text)
+
+          aws ssm wait command-executed \
+            --command-id "${CMD_ID}" \
+            --instance-id "${{ steps.instance.outputs.instance_id }}"
+
+          RESULT=$(aws ssm get-command-invocation \
+            --command-id "${CMD_ID}" \
+            --instance-id "${{ steps.instance.outputs.instance_id }}" \
+            --query StatusDetails --output text)
+          echo "Validation result: ${RESULT}"
+          [ "${RESULT}" = "Success" ] || exit 1

@@ -504,3 +504,8 @@ secrets/
 # Environment configs
 .env.*
 !.env.example
+
+# Terraform — never commit real values
+terraform.tfvars
+*.tfvars
+!*.tfvars.example

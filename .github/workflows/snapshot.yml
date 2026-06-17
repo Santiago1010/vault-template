@@ -1,0 +1,75 @@
+# =============================================================================
+# Vault Raft Snapshot
+# Triggers: every 6 hours, or manual
+# =============================================================================
+
+name: Snapshot
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options: [dev, staging, prod]
+
+env:
+  AWS_REGION: us-east-1
+  VAULT_ENV: ${{ github.event.inputs.environment || 'dev' }}
+
+jobs:
+  snapshot:
+    name: Snapshot
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get Vault instance ID
+        id: instance
+        run: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Project,Values=${{ vars.TF_PROJECT }}" \
+              "Name=tag:Service,Values=vault" \
+              "Name=tag:Environment,Values=${{ env.VAULT_ENV }}" \
+              "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+          echo "instance_id=${INSTANCE_ID}" >> $GITHUB_OUTPUT
+
+      - name: Run snapshot via SSM
+        id: ssm
+        run: |
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "${{ steps.instance.outputs.instance_id }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[\"cd /opt/vault && ENV=${{ env.VAULT_ENV }} ./scripts/snapshot.sh\"]" \
+            --query Command.CommandId \
+            --output text)
+          echo "command_id=${CMD_ID}" >> $GITHUB_OUTPUT
+
+      - name: Wait for snapshot to complete
+        run: |
+          aws ssm wait command-executed \
+            --command-id "${{ steps.ssm.outputs.command_id }}" \
+            --instance-id "${{ steps.instance.outputs.instance_id }}"
+
+      - name: Verify snapshot result
+        run: |
+          RESULT=$(aws ssm get-command-invocation \
+            --command-id "${{ steps.ssm.outputs.command_id }}" \
+            --instance-id "${{ steps.instance.outputs.instance_id }}" \
+            --query StatusDetails \
+            --output text)
+          echo "SSM result: ${RESULT}"
+          [ "${RESULT}" = "Success" ] || exit 1
