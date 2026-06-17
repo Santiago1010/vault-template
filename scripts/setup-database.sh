@@ -127,33 +127,7 @@ vaultcmd write "database/roles/app" \
 ok "App role created (TTL: 1h / max: 4h)"
 
 # -----------------------------------------------------------------------------
-# 6. Update database policy
-# -----------------------------------------------------------------------------
-info "Updating database policy..."
-
-cat >> "${POLICIES_DIR}/database.hcl" << 'POLICY'
-
-# Dynamic credentials
-path "database/creds/debezium" {
-  capabilities = ["read"]
-}
-
-path "database/creds/app" {
-  capabilities = ["read"]
-}
-POLICY
-
-docker cp "${POLICIES_DIR}/database.hcl" "${VAULT_CONTAINER}:/tmp/database.hcl"
-
-docker exec \
-  -e VAULT_ADDR="${VAULT_ADDR}" \
-  -e VAULT_TOKEN="$(cat "${TOKEN_FILE}")" \
-  "${VAULT_CONTAINER}" vault policy write database /tmp/database.hcl
-
-ok "database policy updated"
-
-# -----------------------------------------------------------------------------
-# 7. Smoke test
+# 6. Smoke test
 # -----------------------------------------------------------------------------
 info "Testing dynamic credential generation..."
 
