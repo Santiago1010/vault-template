@@ -19,3 +19,12 @@ path "pki_int/issue/kafka" {
 path "pki_int/cert/*" {
   capabilities = ["read"]
 }
+
+# Kafka SASL and TLS secrets (used by Vault Agent)
+path "secret/data/kafka-template/+/kafka/*" {
+  capabilities = ["read"]
+}
+
+path "secret/metadata/kafka-template/+/kafka/*" {
+  capabilities = ["read", "list"]
+}

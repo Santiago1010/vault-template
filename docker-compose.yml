@@ -18,7 +18,7 @@ services:
       VAULT_API_ADDR: "http://127.0.0.1:8200"
       VAULT_CLUSTER_ADDR: "http://127.0.0.1:8201"
     volumes:
-      - ./config/vault.hcl:/vault/config/vault.hcl:ro
+      - ./config/${VAULT_CONFIG}:/vault/config/vault.hcl:ro
       - ./data:/vault/data
       - ./logs:/vault/logs
     command: vault server -config=/vault/config/vault.hcl
@@ -40,6 +40,8 @@ services:
     image: python:3.11-alpine
     container_name: vault-unseal
     restart: "no"
+    profiles:
+      - local
     depends_on:
       vault:
         condition: service_healthy
